@@ -102,44 +102,44 @@ model_choice = st.radio(label='', options=['FastText (woord)',
                             'RobBERT (zin (RoBERTa))', 
                             'BERTje (zin, (BERT))'])
 
-if model_choice == 'FastText (woord)':
+with st.echo():
+    if model_choice == 'FastText (woord)':
+        fastext_embedding = WordEmbeddings('nl')
+        embedding_list = [fastext_embedding]
+        embeddings = createFlairEmbeddings(embedding_list, data)                  
+        tensors = pd.DataFrame(embeddings)
+        st.write(embeddings[0])
+        csv = tensors.to_csv(sep=';')
 
-    fastext_embedding = WordEmbeddings('nl')
-    embedding_list = [fastext_embedding]
-    embeddings = createFlairEmbeddings(embedding_list, data)                  
-    tensors = pd.DataFrame(embeddings)
-    st.write(embeddings[0])
-    csv = tensors.to_csv(sep=';')
+    if model_choice == 'Flair (karakter)':
 
-if model_choice == 'Flair (karakter)':
+        flair_forward = FlairEmbeddings('nl-forward')
+        flair_backward = FlairEmbeddings('nl-backward')
+        embedding_list = [flair_forward, flair_backward]
+        embeddings = createFlairEmbeddings(embedding_list, data)                  
+        tensors = pd.DataFrame(embeddings)
+        csv = tensors.to_csv(sep=';')   
 
-    flair_forward = FlairEmbeddings('nl-forward')
-    flair_backward = FlairEmbeddings('nl-backward')
-    embedding_list = [flair_forward, flair_backward]
-    embeddings = createFlairEmbeddings(embedding_list, data)                  
-    tensors = pd.DataFrame(embeddings)
-    csv = tensors.to_csv(sep=';')   
+    if model_choice == 'RobBERT (zin (RoBERTa))':
+        modelName ='pdelobelle/robBERT-base'
+        
+        embeddings = createTransformerEmbeddings(modelName, data)
+        tensors = pd.DataFrame(embeddings)
+        st.write(embeddings[0])
+        st.write(embeddings[1].shape)
+        st.write('er zijn in totaal ' + str(tensors.count()[0]) + ' embeddings gemaakt')
+        st.balloons()
+        csv = tensors.to_csv(sep=';')
+        
 
-if model_choice == 'RobBERT (zin (RoBERTa))':
-    modelName ='pdelobelle/robBERT-base'
-    
-    embeddings = createTransformerEmbeddings(modelName, data)
-    tensors = pd.DataFrame(embeddings)
-    st.write(embeddings[0])
-    st.write(embeddings[1].shape)
-    st.write('er zijn in totaal ' + str(tensors.count()[0]) + ' embeddings gemaakt')
-    st.balloons()
-    csv = tensors.to_csv(sep=';')
-    
-
-if model_choice == 'BERTje (zin, (BERT))':
-    modelName ='bert-base-dutch-cased'
-    
-    embeddings = createTransformerEmbeddings(modelName, data)
-    tensors = pd.DataFrame(embeddings)
-    st.write('er zijn in totaal ' + str(tensors.count()[0]) + ' embeddings gemaakt')
-    st.balloons()
-    csv = tensors.to_csv(sep=';')
+    if model_choice == 'BERTje (zin, (BERT))':
+        modelName ='bert-base-dutch-cased'
+        
+        embeddings = createTransformerEmbeddings(modelName, data)
+        tensors = pd.DataFrame(embeddings)
+        st.write('er zijn in totaal ' + str(tensors.count()[0]) + ' embeddings gemaakt')
+        st.balloons()
+        csv = tensors.to_csv(sep=';')
 
 ## create a choice for PCA plot or a similarity score 
 ## TODO choose UMAP and for clustering HDBSCAN
