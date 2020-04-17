@@ -10,6 +10,11 @@ from transformers import AutoModel, AutoTokenizer   #getting all the cool NLP mo
 from flair.embeddings import FlairEmbeddings, WordEmbeddings, DocumentPoolEmbeddings, DocumentRNNEmbeddings
 from flair.data import Sentence
 
+
+from rq import Queue
+from worker import conn
+
+q = Queue(connection=conn)
 ## define methods ##
 
 
@@ -20,7 +25,6 @@ def createTransformerEmbeddings(modelName, data):
     model = AutoModel.from_pretrained(modelName)
     tokenizer = AutoTokenizer.from_pretrained(modelName)
     sentences = data['Interest_Name'].values
-    sentences = sentences[:10]
     for sent in sentences:
         if __name__ == "__main__":
             input_ids = torch.tensor(tokenizer.encode(sent, add_special_tokens=True)).unsqueeze(0)
@@ -29,7 +33,9 @@ def createTransformerEmbeddings(modelName, data):
             #test = unsqueezed.unsqueeze(0)
             output = model(input_ids)
             final_output = output[0]
-            embeddings.append(final_output)  
+            resized =torch.reshape(final_output,(1,-1))
+            array = resized.detach().numpy()
+            embeddings.append(array)  
        
     return embeddings
 
@@ -38,19 +44,29 @@ def createFlairEmbeddings(embedding_list, data):
     embeddings = []
 
     sentences = data['Interest_Name'].values
-    sentences = sentences[:10]
 
     model = DocumentPoolEmbeddings(embedding_list, fine_tune_mode='nonlinear')
     if __name__ == "__main__":
         for sent in sentences:
             sentence = Sentence(sent)
             model.embed(sentence)
-            embeddings.append(sentence.get_embedding())
+            modeled_embedding = sentence.get_embedding()
+            array = modeled_embedding.cpu().detach().numpy()
+            embeddings.append(array)
 
     return embeddings
 
+def createDataFrame(embeddings, data):
+    sentences = data['Interest_Name']
+    sentences_df = pd.DataFrame(sentences)
+    embeddings_df = pd.DataFrame(embeddings)
+    print(embeddings_df)
+    dataframe = sentences_df.join(embeddings_df)
+
+    return dataframe
+
 ## the actual app ##
-st.markdown('# data-analyse interesses #')
+st.markdown('# embeddings maken #')
 st.markdown('__testversie__ 0.1')
 
 st.markdown('deze app is bedoeld voor het omzetten van data als platte tekst naar embeddings :1234:, die later kunnen worden gebruikt om de echte analyses mee te doen :sunglasses:. dit gedeelte bestaat uit ongeveer de volgende stappen.  \n1. upload je data in het uploadveld :writing_hand:.  \n2. kies hoe jouw data eruit moet zien; alleen een interessenaam of ook de beschrijving erbij.  \n3. kies welk model je wilt gebruiken voor het creeëren van de embeddings.  \n4. Download de embeddings. :+1:')
@@ -87,12 +103,6 @@ if text_choice == 'Interest_Name + Comment1':
 
 ## show and interact with the data TODO
         # - choice a number of (random?) examples from the text
-no_of_examples = st.sidebar.text_input("hoeveel voorbeelden om testen", None)
-if no_of_examples is not None:
-        ## change length of the dataset to desired number ##
-        #data = data['Interest_Name'][:no_of_examples]
-        pass
-        
 
 #### model selection ####
 st.markdown('### Selecteer welk model je wilt gebruiken om embeddings te maken ###')
@@ -102,44 +112,56 @@ model_choice = st.radio(label='', options=['FastText (woord)',
                             'RobBERT (zin (RoBERTa))', 
                             'BERTje (zin, (BERT))'])
 
-with st.echo():
-    if model_choice == 'FastText (woord)':
+start_computation = st.button(label= 'start berekening')
+
+if model_choice == 'FastText (woord)' and start_computation == True:
+    with st.spinner('berekenen..'):
         fastext_embedding = WordEmbeddings('nl')
+        st.write('model geladen, nu nog de embeddings...')
         embedding_list = [fastext_embedding]
-        embeddings = createFlairEmbeddings(embedding_list, data)                  
-        tensors = pd.DataFrame(embeddings)
-        st.write(embeddings[0])
-        csv = tensors.to_csv(sep=';')
+        embeddings = createFlairEmbeddings(embedding_list, data)
+        st.write('embeddings binnen, nu mooi maken') 
+        dataframe = createDataFrame(embeddings, data)               
+        st.write(dataframe)
+        csv = dataframe.to_csv(sep=';')
+        st.success('Het is gelukt!')
 
-    if model_choice == 'Flair (karakter)':
+if model_choice == 'Flair (karakter)' and start_computation == True:
 
-        flair_forward = FlairEmbeddings('nl-forward')
-        flair_backward = FlairEmbeddings('nl-backward')
-        embedding_list = [flair_forward, flair_backward]
-        embeddings = createFlairEmbeddings(embedding_list, data)                  
-        tensors = pd.DataFrame(embeddings)
-        csv = tensors.to_csv(sep=';')   
+    flair_forward = FlairEmbeddings('nl-forward')
+    flair_backward = FlairEmbeddings('nl-backward')
+    embedding_list = [flair_forward, flair_backward]
+    embeddings = createFlairEmbeddings(embedding_list, data) 
+    dataframe = createDataFrame(embeddings, data) 
+    st.write(dataframe)              
+    csv = dataframe.to_csv(sep=';')   
 
-    if model_choice == 'RobBERT (zin (RoBERTa))':
-        modelName ='pdelobelle/robBERT-base'
-        
-        embeddings = createTransformerEmbeddings(modelName, data)
-        tensors = pd.DataFrame(embeddings)
-        st.write(embeddings[0])
-        st.write(embeddings[1].shape)
-        st.write('er zijn in totaal ' + str(tensors.count()[0]) + ' embeddings gemaakt')
-        st.balloons()
-        csv = tensors.to_csv(sep=';')
-        
+if model_choice == 'RobBERT (zin (RoBERTa))' and start_computation == True:
+    modelName ='pdelobelle/robBERT-base'
+    
+    embeddings = q.enqueue(createTransformerEmbeddings,modelName, data)
 
-    if model_choice == 'BERTje (zin, (BERT))':
-        modelName ='bert-base-dutch-cased'
-        
-        embeddings = createTransformerEmbeddings(modelName, data)
-        tensors = pd.DataFrame(embeddings)
-        st.write('er zijn in totaal ' + str(tensors.count()[0]) + ' embeddings gemaakt')
-        st.balloons()
-        csv = tensors.to_csv(sep=';')
+    #embeddings = embeddings[0]
+    print(embeddings)
+    dataframe = createDataFrame(embeddings[0][1:-1], data)
+    st.write(embeddings)
+    st.write(embeddings.shape)
+    st.write('er zijn in totaal ' + str(dataframe.count()[0]) + ' embeddings gemaakt')
+    st.balloons()
+
+    st.write(dataframe)
+    
+    csv = dataframe.to_csv(sep=';')
+
+if model_choice == 'BERTje (zin, (BERT))'  and start_computation == True:
+    modelName ='bert-base-dutch-cased'
+    
+    embeddings = createTransformerEmbeddings(modelName, data)
+    dataframe = createDataFrame(embeddings, data)
+
+    st.write('er zijn in totaal ' + str(dataframe.count()[0]) + ' embeddings gemaakt')
+    st.balloons()
+    csv = dataframe.to_csv(sep=';')
 
 ## create a choice for PCA plot or a similarity score 
 ## TODO choose UMAP and for clustering HDBSCAN
