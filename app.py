@@ -9,36 +9,30 @@ import torch
 from transformers import AutoModel, AutoTokenizer   #getting all the cool NLP models
 from flair.embeddings import FlairEmbeddings, WordEmbeddings, DocumentPoolEmbeddings, DocumentRNNEmbeddings
 from flair.data import Sentence
-from utils import createTransformerEmbeddings
 
-from rq import Queue
-from worker import conn
+@st.cache
+def createTransformerEmbeddings(modelName, data):
 
-q = Queue(connection=conn)
-## define methods ##
+    embeddings = []
 
-
-# def createTransformerEmbeddings(modelName, data):
-
-#     embeddings = []
-
-#     model = AutoModel.from_pretrained(modelName)
-#     tokenizer = AutoTokenizer.from_pretrained(modelName)
-#     sentences = data['Interest_Name'].values
-#     for sent in sentences:
-#         if __name__ == "__main__":
-#             input_ids = torch.tensor(tokenizer.encode(sent, add_special_tokens=True)).unsqueeze(0)
-#             #input_ids = tokenizer.encode(sent, add_special_tokens=True)
-#             #unsqueezed = torch.tensor(input_ids)
-#             #test = unsqueezed.unsqueeze(0)
-#             output = model(input_ids)
-#             final_output = output[0]
-#             resized =torch.reshape(final_output,(1,-1))
-#             array = resized.detach().numpy()
-#             embeddings.append(array)  
+    model = AutoModel.from_pretrained(modelName)
+    tokenizer = AutoTokenizer.from_pretrained(modelName)
+    sentences = data['Interest_Name'].values
+    for sent in sentences:
+        if __name__ == "__main__":
+            input_ids = torch.tensor(tokenizer.encode(sent, add_special_tokens=True)).unsqueeze(0)
+            #input_ids = tokenizer.encode(sent, add_special_tokens=True)
+            #unsqueezed = torch.tensor(input_ids)
+            #test = unsqueezed.unsqueeze(0)
+            output = model(input_ids)
+            final_output = output[0]
+            resized =torch.reshape(final_output,(1,-1))
+            array = resized.detach().numpy()
+            embeddings.append(array)  
        
-#     return embeddings
+    return embeddings
 
+@st.cache
 def createFlairEmbeddings(embedding_list, data):
 
     embeddings = []
@@ -60,10 +54,10 @@ def createDataFrame(embeddings, data):
     sentences = data['Interest_Name']
     sentences_df = pd.DataFrame(sentences)
     embeddings_df = pd.DataFrame(embeddings)
-    print(embeddings_df)
     dataframe = sentences_df.join(embeddings_df)
 
     return dataframe
+
 
 ## the actual app ##
 st.markdown('# embeddings maken #')
@@ -138,20 +132,26 @@ if model_choice == 'Flair (karakter)' and start_computation == True:
 
 if model_choice == 'RobBERT (zin (RoBERTa))' and start_computation == True:
     modelName ='pdelobelle/robBERT-base'
-    
-    embeddings = q.enqueue(createTransformerEmbeddings, modelName, data)
 
+   
+    embeddings =createTransformerEmbeddings(modelName, data)
+    
+    st.write(embeddings[0])
+    print(embeddings[0][0][0])
+    list_embeddings = []
+    for i in embeddings: 
+        list_embeddings.append(embeddings[i][0])
+        
     #embeddings = embeddings[0]
-    print(embeddings)
-    dataframe = createDataFrame(embeddings[0][1:-1], data)
-    st.write(embeddings)
-    st.write(embeddings.shape)
+    dataframe = createDataFrame(list_embeddings, data)
+    st.write(dataframe)
     st.write('er zijn in totaal ' + str(dataframe.count()[0]) + ' embeddings gemaakt')
     st.balloons()
 
     st.write(dataframe)
-    
+
     csv = dataframe.to_csv(sep=';')
+
 
 if model_choice == 'BERTje (zin, (BERT))'  and start_computation == True:
     modelName ='bert-base-dutch-cased'
